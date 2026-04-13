@@ -16,18 +16,22 @@ public class MapGenerator : MonoBehaviour
     public GameObject floorPrefab;
     public GameObject playerPrefab;
 
-    public enum GenerationPattern { Classic, Linear, Clover }
+    public enum GenerationPattern { Classic, Linear, Clover, Modular }
     public GenerationPattern selectedPattern;
 
-    public CinemachineCamera vcam;
+    public Unity.Cinemachine.CinemachineCamera vcam;
 
-    private int[,] map;
-    private List<RectInt> rooms = new List<RectInt>();
+    public int[,] map;
+    public List<RectInt> rooms = new List<RectInt>();
 
     [Header("Prefab Settings")]
-    public GameObject[] handMadeRoomPrefabs; // Список заранее созданных комнат
+    public GameObject[] handMadeRoomPrefabs; // Array of hand-made room prefabs
     [Range(0, 100)]
     public int prefabChance = 30;
+
+    [Header("Modular Generation Settings")]
+    [Tooltip("Drag and drop algorithm component here (e.g. BSPAlgorithm, RandomWalkAlgorithm, etc.)")]
+    public Map.Algorithms.GenerationAlgorithm customAlgorithm;
 
     void Start()
     {
@@ -37,7 +41,7 @@ public class MapGenerator : MonoBehaviour
     void GenerateMap()
     {
         InitializeMap();
-        rooms.Clear(); // Не забывай очищать список при перегенерации
+        rooms.Clear(); // Clear rooms
 
         switch (selectedPattern)
         {
@@ -47,8 +51,11 @@ public class MapGenerator : MonoBehaviour
             case GenerationPattern.Clover:
                 GenerateCloverPattern();
                 break;
+            case GenerationPattern.Modular:
+                GenerateModularMap();
+                break;
             default:
-                CreateRooms(); // Твой стандартный метод
+                CreateRooms(); // Default: classic room generation
                 ConnectRooms();
                 break;
         }
@@ -57,9 +64,93 @@ public class MapGenerator : MonoBehaviour
         SpawnPlayer();
     }
 
+    void GenerateModularMap()
+    {
+        // 1. Create empty map
+        InitializeMap();
+        rooms.Clear();
+
+        // 2. Generate room shapes
+        List<Map.Shapes.RoomShape> generatedShapes = new List<Map.Shapes.RoomShape>();
+        for (int i = 0; i < roomCount; i++)
+        {
+            Map.Shapes.RoomShape shape;
+            if (Random.value > 0.5f)
+                shape = new Map.Shapes.SmallSquareShape();
+            else
+                shape = new Map.Shapes.LargeSquareShape();
+
+            shape.Generate();
+            generatedShapes.Add(shape);
+        }
+
+        // 3. Place shapes on map
+        if (customAlgorithm != null)
+        {
+            customAlgorithm.Generate(map, rooms, width, height, generatedShapes);
+        }
+        else
+        {
+            Debug.LogWarning("Algorithm component is not assigned! Running random placement variant.");
+            foreach (var shape in generatedShapes)
+            {
+                PlaceShapeOnMap(shape);
+            }
+        }
+
+        // 4. Connect
+        ConnectRooms();
+    }
+
+    void PlaceShapeOnMap(Map.Shapes.RoomShape shape)
+    {
+        int retries = 50;
+        int maxW = shape.Width;
+        int maxH = shape.Height;
+
+        while (retries > 0)
+        {
+            int x = Random.Range(1, width - maxW - 1);
+            int y = Random.Range(1, height - maxH - 1);
+
+            RectInt newRoom = new RectInt(x, y, maxW, maxH);
+
+            // Check overlap
+            bool overlaps = false;
+            foreach (var room in rooms)
+            {
+                // Leave 1 cell gap
+                RectInt expandedRoom = new RectInt(room.x - 1, room.y - 1, room.width + 2, room.height + 2);
+                if (expandedRoom.Overlaps(newRoom))
+                {
+                    overlaps = true;
+                    break;
+                }
+            }
+
+            if (!overlaps)
+            {
+                rooms.Add(newRoom);
+                // "Transfer" shape to map
+                for (int sx = 0; sx < maxW; sx++)
+                {
+                    for (int sy = 0; sy < maxH; sy++)
+                    {
+                        if (shape.Grid[sx, sy] == 1)
+                        {
+                            map[x + sx, y + sy] = 2; // 2 - floor
+                        }
+                    }
+                }
+                break; // Successfully placed
+            }
+            retries--;
+        }
+    }
+
     void GenerateCloverPattern()
     {
-        // 1. Центральная комната
+        // 1. Create center room
         RectInt centerRoom = new RectInt(width / 2 - 5, height / 2 - 5, 10, 10);
         rooms.Add(centerRoom);
         CarveRoom(centerRoom);
@@ -67,25 +158,25 @@ public class MapGenerator : MonoBehaviour
         Vector2Int center = GetCenter(centerRoom);
         Vector2Int[] directions = { Vector2Int.up, Vector2Int.down, Vector2Int.left, Vector2Int.right };
 
-        // 2. Пускаем ветки в 4 стороны
+        // 2. Generate path in 4 directions
         foreach (var dir in directions)
         {
             Vector2Int currentPos = center;
             for (int i = 0; i < roomCount / 4; i++)
             {
-                currentPos += dir * Random.Range(8, 12); // Шагаем в сторону
+                currentPos += dir * Random.Range(8, 12); // distance between rooms
 
                 int w = Random.Range(roomMinSize.x, roomMaxSize.x);
                 int h = Random.Range(roomMinSize.y, roomMaxSize.y);
 
                 RectInt leafRoom = new RectInt(currentPos.x - w / 2, currentPos.y - h / 2, w, h);
 
-                // Проверка границ
+                // Check map bounds
                 if (leafRoom.xMin > 0 && leafRoom.xMax < width && leafRoom.yMin > 0 && leafRoom.yMax < height)
                 {
                     rooms.Add(leafRoom);
                     CarveRoom(leafRoom);
-                    // Соединяем текущую комнату "лепестка" с предыдущей в этой ветке
+                    // Create corridor to previous room
                     CreateCorridor(currentPos - dir * 10, GetCenter(leafRoom));
                 }
             }
@@ -101,11 +192,11 @@ public class MapGenerator : MonoBehaviour
             int w = Random.Range(roomMinSize.x, roomMaxSize.x);
             int h = Random.Range(roomMinSize.y, roomMaxSize.y);
 
-            // Смещаем следующую комнату вверх, но немного "шатаем" по X
+            // New room position with slight X offset
             int x = lastPos.x - w / 2 + Random.Range(-3, 4);
-            int y = lastPos.y + Random.Range(5, 10); // Дистанция между комнатами
+            int y = lastPos.y + Random.Range(5, 10); // Offset up
 
-            // Проверка границ массива, чтобы не вылететь за пределы
+            // Clamp room position so it does not exceed map
             x = Mathf.Clamp(x, 1, width - w - 1);
             y = Mathf.Clamp(y, 1, height - h - 1);
 
@@ -113,7 +204,7 @@ public class MapGenerator : MonoBehaviour
             rooms.Add(newRoom);
             CarveRoom(newRoom);
 
-            // Соединяем с предыдущей
+            // Connect to previous room
             if (i > 0)
             {
                 CreateCorridor(GetCenter(rooms[i - 1]), GetCenter(rooms[i]));
@@ -136,8 +227,8 @@ public class MapGenerator : MonoBehaviour
     {
         for (int i = 0; i < roomCount; i++)
         {
-            // 1. Сначала определяем размеры (для префаба или для случайной комнаты)
-            // Если будем спавнить префаб, позже подправим размеры под него
+            // 1. Generate room dimensions
+            // Randomly choose width and height within limits
             int w = Random.Range(roomMinSize.x, roomMaxSize.x);
             int h = Random.Range(roomMinSize.y, roomMaxSize.y);
 
@@ -146,7 +237,7 @@ public class MapGenerator : MonoBehaviour
 
             RectInt newRoom = new RectInt(x, y, w, h);
 
-            // 2. Проверка на наложение (как и было)
+            // 2. Overlap check
             bool overlaps = false;
             foreach (var room in rooms)
             {
@@ -161,14 +252,14 @@ public class MapGenerator : MonoBehaviour
             {
                 rooms.Add(newRoom);
 
-                // 3. Выбор: Рандом или Префаб?
+                // 3. Decide: prefab or carve?
                 if (handMadeRoomPrefabs.Length > 0 && Random.Range(0, 100) < prefabChance)
                 {
                     SpawnPrefabRoom(newRoom);
                 }
                 else
                 {
-                    CarveRoom(newRoom); // Ваша старая логика заполнения массива map[x,y]=2
+                    CarveRoom(newRoom); // Paint room floor on map: map[x,y]=2
                 }
             }
         }
@@ -176,16 +267,16 @@ public class MapGenerator : MonoBehaviour
 
     void SpawnPrefabRoom(RectInt roomData)
     {
-        // Выбираем префаб
+        // Pick random prefab
         GameObject prefab = handMadeRoomPrefabs[Random.Range(0, handMadeRoomPrefabs.Length)];
 
-        // Получаем его реальный размер из скрипта RoomData
+        // Get actual size from RoomData
         Vector2Int actualSize = prefab.GetComponent<RoomData>().size;
 
-        // Спавним (с учетом того, что Pivot в углу)
+        // Instantiate (at floor level, assuming Pivot is at bottom-left)
         Instantiate(prefab, new Vector3(roomData.xMin, 0, roomData.yMin), Quaternion.identity, transform);
 
-        // Помечаем в массиве map именно столько клеток, сколько занимает префаб
+        // Record room floor on map array to carve correctly
         for (int x = roomData.xMin; x < roomData.xMin + actualSize.x; x++)
             for (int y = roomData.yMin; y < roomData.yMin + actualSize.y; y++)
                 if (x < width && y < height) map[x, y] = 2;

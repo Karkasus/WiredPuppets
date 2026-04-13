@@ -37,7 +37,7 @@ public class PlayerController : MonoBehaviour
 
     private void HandleRotation()
     {
-        // ПРЯМОЕ СЧИТЫВАНИЕ МЫШИ (игнорируем настройки в PlayerKeys для надежности)
+        // DIRECT MOUSE READING (ignoring PlayerKeys settings for reliability)
         Vector2 mousePos = Mouse.current.position.ReadValue();
 
         Ray ray = mainCamera.ScreenPointToRay(mousePos);
@@ -53,7 +53,7 @@ public class PlayerController : MonoBehaviour
             {
                 Quaternion targetRotation = Quaternion.LookRotation(lookDir);
 
-                // Плавный поворот. Если хочешь моментальный — замени всю строку ниже на:
+                // Smooth rotation. For instant rotation, replace the line below with:
                 // rb.MoveRotation(targetRotation);
                 rb.MoveRotation(Quaternion.Slerp(rb.rotation, targetRotation, rotationSpeed * Time.deltaTime));
             }

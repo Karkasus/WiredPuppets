@@ -636,7 +636,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::MapGenerator
   width: 50
   height: 50
-  roomCount: 3
+  roomCount: 20
   roomMinSize: {x: 4, y: 4}
   roomMaxSize: {x: 10, y: 10}
   wallPrefab: {fileID: 3818695188316229145, guid: bab1be860d9b2ec4c94deeefe08abfa1, type: 3}
@@ -644,9 +644,10 @@ MonoBehaviour:
   playerPrefab: {fileID: 1766749336142660342, guid: 4f53935546c403d428ec5b3c2e9ce025, type: 3}
   selectedPattern: 0
   vcam: {fileID: 906949278}
-  handMadeRoomPrefabs:
-  - {fileID: 4785733523093191186, guid: 83fba78e0c589dc4689e8e96907bec9a, type: 3}
-  prefabChance: 20
+  rooms: []
+  handMadeRoomPrefabs: []
+  prefabChance: 0
+  customAlgorithm: {fileID: 11400000, guid: 8fd42553b434ac54f853c12a5a294ec3, type: 2}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

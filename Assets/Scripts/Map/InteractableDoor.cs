@@ -3,13 +3,13 @@ using System.Collections;
 
 public class InteractableDoor : MonoBehaviour
 {
-    [Header("Настройки анимации")]
-    [SerializeField] private GameObject doorModel; // Объект самой двери, который будет двигаться
-    [SerializeField] private float openHeight = 3.0f; // На сколько юнитов дверь поднимется
-    [SerializeField] private float openSpeed = 2.0f; // Скорость открытия
+    [Header("Door Settings")]
+    [SerializeField] private GameObject doorModel; // The door model object that will be moved
+    [SerializeField] private float openHeight = 3.0f; // Height to which the door opens
+    [SerializeField] private float openSpeed = 2.0f; // Opening speed
 
-    [Header("Настройки взаимодействия")]
-    [SerializeField] private KeyCode interactKey = KeyCode.F; // Кнопка взаимодействия
+    [Header("Interaction Settings")]
+    [SerializeField] private KeyCode interactKey = KeyCode.F; // Interaction key
 
     private bool isPlayerInRange = false;
     private bool isOpening = false;
@@ -20,43 +20,43 @@ public class InteractableDoor : MonoBehaviour
     {
         if (doorModel == null)
         {
-            Debug.LogError($"На объекте {gameObject.name} не назначена модель двери в скрипте InteractableDoor!");
+            Debug.LogError($"Door model missing on {gameObject.name} in InteractableDoor script!");
             enabled = false;
             return;
         }
-        // Запоминаем начальное (закрытое) положение модели
+        // Save the closed (initial) position of the door
         closedPosition = doorModel.transform.localPosition;
     }
 
     void Update()
     {
-        // Если игрок рядом, дверь не открывается и нажата кнопка F
+        // If player is in range and presses the interact key
         if (isPlayerInRange && !isOpening && !isOpen && Input.GetKeyDown(interactKey))
         {
             StartCoroutine(OpenDoorRoutine());
         }
     }
 
-    // Корутина для плавного открытия
+    // Coroutine for door opening
     IEnumerator OpenDoorRoutine()
     {
         isOpening = true;
         Vector3 targetPosition = closedPosition + Vector3.up * openHeight;
         float elapsed = 0;
 
-        // Пока не достигли целевой высоты
+        // While not fully opened
         while (elapsed < 1.0f)
         {
-            // Плавное перемещение (Lerp)
+            // Smoothly move (Lerp)
             doorModel.transform.localPosition = Vector3.Lerp(closedPosition, targetPosition, elapsed);
             elapsed += Time.deltaTime * openSpeed;
-            yield return null; // Ждем следующего кадра
+            yield return null; // Wait for next frame
         }
 
-        // Устанавливаем точную финальную позицию
+        // Snap to target position
         doorModel.transform.localPosition = targetPosition;
 
-        // Отключаем физический коллайдер двери (если он есть на модели), чтобы игрок мог пройти
+        // Disable collider so player can pass through
         Collider doorCollider = doorModel.GetComponent<Collider>();
         if (doorCollider != null && !doorCollider.isTrigger)
         {
@@ -67,23 +67,23 @@ public class InteractableDoor : MonoBehaviour
         isOpening = false;
     }
 
-    // Обработка входа игрока в триггер
+    // Triggered when player enters the trigger
     private void OnTriggerEnter(Collider other)
     {
         if (other.CompareTag("Player"))
         {
             isPlayerInRange = true;
-            // Здесь можно включить UI-подсказку "Нажмите F чтобы открыть"
+            // Optionally, show UI prompt like "Press F to open"
         }
     }
 
-    // Обработка выхода игрока из триггера
+    // Triggered when player leaves the trigger
     private void OnTriggerExit(Collider other)
     {
         if (other.CompareTag("Player"))
         {
             isPlayerInRange = false;
-            // Здесь можно выключить UI-подсказку
+            // Optionally, hide UI prompt
         }
     }
 }
